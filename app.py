@@ -1,6 +1,6 @@
 import streamlit as st
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import SentenceTransformerEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.llms import Ollama
 from langchain.chains import RetrievalQA
 from langchain.document_loaders import PyPDFLoader
@@ -8,7 +8,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
 import dotenv
 
-# Load environment variables
+# Load environment variables (if any)
 dotenv.load_dotenv()
 
 st.set_page_config(page_title="PDF Chatbot", layout="centered")
@@ -16,19 +16,18 @@ st.title("💬 RAG Chatbot")
 st.write("Upload your PDF and ask questions about it!")
 
 uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
-
 query = st.chat_input("Ask something about the PDF...")
 
-# Load embedding model
-EMB_MODEL = os.getenv("EMBEDDING_MODEL") or "sentence-transformers/all-MiniLM-L6-v2"
-from langchain.embeddings import HuggingFaceEmbeddings
+# ✅ Use sentencepiece-free embedding model
+EMB_MODEL = "intfloat/e5-small-v2"
 
+# Initialize embeddings (safe on CPU)
 embedding = HuggingFaceEmbeddings(
     model_name=EMB_MODEL,
-    model_kwargs={"device": "cpu"}  # For Streamlit Cloud
+    model_kwargs={"device": "cpu"}
 )
 
-# PDF upload and processing
+# Process PDF if uploaded
 if uploaded_file is not None:
     with open("temp.pdf", "wb") as f:
         f.write(uploaded_file.read())
@@ -45,7 +44,7 @@ if uploaded_file is not None:
     vectordb = Chroma.from_documents(
         documents=documents,
         embedding=embedding,
-        collection_name="pdf_docs"  # no `persist_directory`
+        collection_name="pdf_docs"
     )
 
     retriever = vectordb.as_retriever()
