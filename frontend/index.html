@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RAG Chatbot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+  <div class="w-full max-w-md bg-white rounded-lg shadow p-4 flex flex-col">
+    <h1 class="text-2xl font-bold mb-4 text-center">RAG Chatbot</h1>
+    <div id="chat" class="flex-1 overflow-y-auto mb-4 space-y-2"></div>
+    <div class="flex">
+      <input id="inp" type="text" placeholder="Type your question..."
+             class="flex-1 border rounded-l px-2 py-1"/>
+      <button id="btn" class="bg-blue-500 text-white px-4 rounded-r">Send</button>
+    </div>
+  </div>
+
+  <script>
+    const chat = document.getElementById("chat"),
+          inp  = document.getElementById("inp"),
+          btn  = document.getElementById("btn");
+
+    function addMsg(sender, text){
+      const div = document.createElement("div");
+      div.className = sender==="user"
+        ? "text-right"
+        : "text-left";
+      div.innerHTML = `<span class="inline-block p-2 rounded ${sender==="user"?"bg-blue-100":"bg-gray-200"}">${text}</span>`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    btn.onclick = async ()=>{
+      const q = inp.value.trim();
+      if(!q) return;
+      addMsg("user", q);
+      inp.value = "";
+      const res = await fetch("/api/chat", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({question:q})
+      });
+      const { answer } = await res.json();
+      addMsg("bot", answer);
+    };
+
+    inp.addEventListener("keydown", e=> { if(e.key==="Enter") btn.click(); });
+  </script>
+</body>
+</html>

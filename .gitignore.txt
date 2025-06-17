@@ -1,0 +1,13 @@
+.cache/
+.ollama/
+__pycache__/
+*.pyc
+*.pkl
+*.log
+*.db
+*.sqlite
+*.env
+.env
+.idea/
+.vscode/
+*.ipynb_checkpoints/
