@@ -21,7 +21,12 @@ query = st.chat_input("Ask something about your PDF...")
 EMB_MODEL = os.getenv("EMBEDDING_MODEL") or "sentence-transformers/all-MiniLM-L6-v2"
 
 # Updated embedding line using safer class
-embedding = SentenceTransformerEmbeddings(model_name=EMB_MODEL)
+from langchain.embeddings import HuggingFaceEmbeddings
+
+embedding = HuggingFaceEmbeddings(
+    model_name=EMB_MODEL,
+    model_kwargs={"device": "cpu"}  # force CPU usage
+)
 
 vectordb = Chroma(
     persist_directory="./chroma_db",
