@@ -1,59 +1,67 @@
 import streamlit as st
+import os
+import tempfile
+import dotenv
+from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.llms import Ollama
 from langchain.chains import RetrievalQA
-from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import TextLoader
+from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-import os
-import dotenv
-from pathlib import Path
 
 # Load environment variables
 dotenv.load_dotenv()
 
-# UI Header
+# Streamlit UI setup
 st.set_page_config(page_title="PDF Chatbot", layout="centered")
 st.title("💬 RAG Chatbot")
-st.write("Ask questions based on your PDF content.")
+st.write("Upload a PDF and ask questions based on its content.")
 
-# Input box
+# Upload PDF
+uploaded_file = st.file_uploader("📄 Upload a PDF", type=["pdf"])
+
+# User query input
 query = st.chat_input("Ask something about your PDF...")
 
-# Set embedding model
+# Initialize model
 EMB_MODEL = os.getenv("EMBEDDING_MODEL") or "sentence-transformers/all-MiniLM-L6-v2"
+
+# Set up embedding function
 embedding = HuggingFaceEmbeddings(
     model_name=EMB_MODEL,
-    model_kwargs={"device": "cpu"}  # use CPU to avoid GPU issues
+    model_kwargs={"device": "cpu"}
 )
 
-# Load sample text data (replace with your PDF document parsing)
-docs_folder = "./docs"  # make sure you upload your PDFs/texts to this folder
-if not os.path.exists(docs_folder):
-    os.makedirs(docs_folder)
-    # Create a dummy file to avoid crash
-    with open(os.path.join(docs_folder, "example.txt"), "w") as f:
-        f.write("This is an example document. Replace it with actual PDF loading.")
+# If PDF is uploaded
+if uploaded_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        pdf_path = tmp_file.name
 
-# Load and split documents
-loader = TextLoader(os.path.join(docs_folder, "example.txt"))  # replace this with PDFLoader if needed
-documents = loader.load()
-splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-texts = splitter.split_documents(documents)
+    # Load and split PDF into chunks
+    loader = PyPDFLoader(pdf_path)
+    pages = loader.load()
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    docs = splitter.split_documents(pages)
 
-# Create FAISS vectorstore
-vectordb = FAISS.from_documents(texts, embedding)
-retriever = vectordb.as_retriever()
+    # Store vectors
+    vectordb = Chroma.from_documents(
+        documents=docs,
+        embedding=embedding,
+        persist_directory="./chroma_db",
+        collection_name="pdf_docs"
+    )
+    vectordb.persist()
+    retriever = vectordb.as_retriever()
 
-# Set LLM
-llm = Ollama(model="tinyllama")
+    # Initialize LLM + Chain
+    llm = Ollama(model="tinyllama")
+    qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
 
-# Create QA chain
-qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
-
-# Show response
-if query:
-    with st.spinner("Thinking..."):
-        result = qa_chain.run(query)
-    st.chat_message("user").write(query)
-    st.chat_message("assistant").write(result)
+    if query:
+        with st.spinner("Thinking..."):
+            response = qa_chain.run(query)
+        st.chat_message("user").write(query)
+        st.chat_message("assistant").write(response)
+else:
+    st.warning("👆 Please upload a PDF to begin.")
