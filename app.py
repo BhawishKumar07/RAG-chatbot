@@ -1,67 +1,61 @@
 import streamlit as st
-import os
-import tempfile
-import dotenv
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_community.llms import Ollama
 from langchain.chains import RetrievalQA
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import os
+import dotenv
 
 # Load environment variables
 dotenv.load_dotenv()
 
-# Streamlit UI setup
 st.set_page_config(page_title="PDF Chatbot", layout="centered")
 st.title("💬 RAG Chatbot")
-st.write("Upload a PDF and ask questions based on its content.")
+st.write("Upload your PDF and ask questions about it!")
 
-# Upload PDF
-uploaded_file = st.file_uploader("📄 Upload a PDF", type=["pdf"])
+uploaded_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
 
-# User query input
-query = st.chat_input("Ask something about your PDF...")
+query = st.chat_input("Ask something about the PDF...")
 
-# Initialize model
+# Load embedding model
 EMB_MODEL = os.getenv("EMBEDDING_MODEL") or "sentence-transformers/all-MiniLM-L6-v2"
+from langchain.embeddings import HuggingFaceEmbeddings
 
-# Set up embedding function
 embedding = HuggingFaceEmbeddings(
     model_name=EMB_MODEL,
-    model_kwargs={"device": "cpu"}
+    model_kwargs={"device": "cpu"}  # For Streamlit Cloud
 )
 
-# If PDF is uploaded
-if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        pdf_path = tmp_file.name
+# PDF upload and processing
+if uploaded_file is not None:
+    with open("temp.pdf", "wb") as f:
+        f.write(uploaded_file.read())
 
-    # Load and split PDF into chunks
-    loader = PyPDFLoader(pdf_path)
-    pages = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    docs = splitter.split_documents(pages)
+    loader = PyPDFLoader("temp.pdf")
+    docs = loader.load()
 
-    # Store vectors
-    vectordb = Chroma.from_documents(
-        documents=docs,
-        embedding=embedding,
-        persist_directory="./chroma_db",
-        collection_name="pdf_docs"
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
     )
-    vectordb.persist()
-    retriever = vectordb.as_retriever()
+    documents = text_splitter.split_documents(docs)
 
-    # Initialize LLM + Chain
+    vectordb = Chroma.from_documents(
+        documents=documents,
+        embedding=embedding,
+        collection_name="pdf_docs"  # no `persist_directory`
+    )
+
+    retriever = vectordb.as_retriever()
     llm = Ollama(model="tinyllama")
     qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
 
     if query:
         with st.spinner("Thinking..."):
-            response = qa_chain.run(query)
+            result = qa_chain.run(query)
         st.chat_message("user").write(query)
-        st.chat_message("assistant").write(response)
+        st.chat_message("assistant").write(result)
 else:
-    st.warning("👆 Please upload a PDF to begin.")
+    st.warning("Please upload a PDF to continue.")
